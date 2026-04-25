@@ -64,7 +64,7 @@ type LoginFormProps = {
 };
 
 const LoginForm = ({ onForgot, onRegister }: LoginFormProps) => {
-  const { login, authLoading } = useAuth();
+  const { login, authLoading, supabaseMode } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -94,19 +94,21 @@ const LoginForm = ({ onForgot, onRegister }: LoginFormProps) => {
       </div>
 
       {/* Demo hint */}
-      <div className="p-3.5 rounded-xl bg-primary-subtle border border-primary/15 mb-6">
-        <p className="text-xs text-primary/80 leading-relaxed">
-          <span className="font-semibold text-primary">Demo:</span> Usa{" "}
-          <code className="bg-primary/10 px-1 py-0.5 rounded text-[11px] font-mono">
-            ana@familia.com
-          </code>{" "}
-          y contraseña{" "}
-          <code className="bg-primary/10 px-1 py-0.5 rounded text-[11px] font-mono">
-            demo123
-          </code>
-          {" "}para ingresar al dashboard.
-        </p>
-      </div>
+      {!supabaseMode ? (
+        <div className="p-3.5 rounded-xl bg-primary-subtle border border-primary/15 mb-6">
+          <p className="text-xs text-primary/80 leading-relaxed">
+            <span className="font-semibold text-primary">Demo:</span> Usa{" "}
+            <code className="bg-primary/10 px-1 py-0.5 rounded text-[11px] font-mono">
+              ana@familia.com
+            </code>{" "}
+            y contraseña{" "}
+            <code className="bg-primary/10 px-1 py-0.5 rounded text-[11px] font-mono">
+              demo123
+            </code>{" "}
+            para ingresar al dashboard.
+          </p>
+        </div>
+      ) : null}
 
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Email */}
@@ -472,9 +474,6 @@ export default function LoginPage() {
               <span className="font-display font-bold text-foreground text-lg leading-none">
                 Kipi Safe
               </span>
-              <p className="text-[10px] text-muted-foreground mt-0.5">
-                by SafetyTech
-              </p>
             </div>
           </div>
         </div>

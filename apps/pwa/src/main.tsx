@@ -1,10 +1,11 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { createBrowserRouter, RouterProvider, Outlet, Navigate } from "react-router";
+import { createBrowserRouter, RouterProvider, Outlet, Navigate, useLocation } from "react-router";
 import { registerSW } from "virtual:pwa-register";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import LoginPage from "./pages/LoginPage";
 import Dashboard from "./pages/Dashboard";
+import PairingPage from "./pages/PairingPage";
 import "./index.css";
 import React from "react";
 
@@ -41,7 +42,8 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
 
 // Componente para proteger rutas que requieren sesión iniciada
 const PrivateRoute = () => {
-  const { user, authLoading } = useAuth();
+  const { user, authLoading, isNewUser } = useAuth();
+  const location = useLocation();
   
   if (authLoading) {
     return (
@@ -51,7 +53,9 @@ const PrivateRoute = () => {
     );
   }
   
-  return user ? <Outlet /> : <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="/login" replace />;
+  if (isNewUser && location.pathname !== "/pairing") return <Navigate to="/pairing" replace />;
+  return <Outlet />;
 };
 
 const router = createBrowserRouter([
@@ -69,11 +73,7 @@ const router = createBrowserRouter([
       },
       {
         path: "pairing",
-        element: (
-          <div className="p-8">
-            <h1 className="text-3xl font-heading text-primary">Vincular Dispositivo</h1>
-          </div>
-        ),
+        element: <PairingPage />,
       },
       {
         index: true,
@@ -83,7 +83,13 @@ const router = createBrowserRouter([
   }
 ]);
 
-registerSW({ immediate: true });
+if (import.meta.env.DEV && "serviceWorker" in navigator) {
+  navigator.serviceWorker.getRegistrations().then((regs) => {
+    regs.forEach((r) => r.unregister().catch(() => {}));
+  });
+} else {
+  registerSW({ immediate: true });
+}
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

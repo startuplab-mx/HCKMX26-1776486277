@@ -25,7 +25,7 @@ export function applyCorsHeaders(c: Context, origin: string | undefined): void {
     c.header("Vary", "Origin");
     c.header("Access-Control-Allow-Credentials", "true");
   }
-  c.header("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  c.header("Access-Control-Allow-Methods", "GET,POST,PATCH,OPTIONS");
   c.header(
     "Access-Control-Allow-Headers",
     "Authorization, Content-Type, X-Requested-With",

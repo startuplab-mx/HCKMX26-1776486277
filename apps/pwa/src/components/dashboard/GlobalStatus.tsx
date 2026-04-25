@@ -5,10 +5,16 @@ export function GlobalStatus({
   status,
   unreadAlerts,
   childName,
+  devicesActive,
+  messagesAnalyzedToday,
+  screenTimeToday,
 }: {
   status: "safe" | "alert";
   unreadAlerts: number;
   childName: string;
+  devicesActive?: number | null;
+  messagesAnalyzedToday?: number | null;
+  screenTimeToday?: string | null;
 }) {
   const isSafe = status === "safe";
 
@@ -71,9 +77,24 @@ export function GlobalStatus({
         )}
       >
         {[
-          { icon: Smartphone, label: "Dispositivos", value: "2 / 2", sub: "activos" },
-          { icon: Zap, label: "Analizados Hoy", value: "348", sub: "mensajes" },
-          { icon: Clock, label: "Pantalla Hoy", value: "8.5h", sub: "tiempo total" },
+          {
+            icon: Smartphone,
+            label: "Dispositivos",
+            value: typeof devicesActive === "number" ? String(devicesActive) : "—",
+            sub: "activos",
+          },
+          {
+            icon: Zap,
+            label: "Analizados Hoy",
+            value: typeof messagesAnalyzedToday === "number" ? String(messagesAnalyzedToday) : "—",
+            sub: "eventos",
+          },
+          {
+            icon: Clock,
+            label: "Pantalla Hoy",
+            value: typeof screenTimeToday === "string" && screenTimeToday ? screenTimeToday : "—",
+            sub: "tiempo total",
+          },
         ].map((stat) => {
           const Icon = stat.icon;
           return (

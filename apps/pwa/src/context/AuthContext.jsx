@@ -24,6 +24,7 @@ async function fetchDashboardMinorsCount(accessToken, userId) {
   const res = await fetch(
     `${apiUrl("/api/dashboard")}?parent_id=${encodeURIComponent(userId)}`,
     {
+      cache: "no-store",
       headers: { Authorization: `Bearer ${accessToken}` },
     },
   );
@@ -48,10 +49,10 @@ export const AuthProvider = ({ children }) => {
       return;
     }
     const { ok, count } = await fetchDashboardMinorsCount(token, userId);
-    if (!ok) {
-      setIsNewUser(true);
-      return;
-    }
+    // IMPORTANTE:
+    // Solo mandamos a /pairing si CONFIRMAMOS que no hay menores.
+    // Si hay error de red/auth/backend, no forzamos pairing (evita falsos positivos).
+    if (!ok) return;
     setIsNewUser(count === 0);
   }, []);
 
@@ -128,12 +129,6 @@ export const AuthProvider = ({ children }) => {
         const u = data.user;
         const session = data.session;
         if (u && session) {
-          // Intentar forzar el registro en la tabla publica para evitar fallos de Foreign Key
-          try {
-            await supabase.from("parents").upsert({ id: u.id, email: u.email });
-          } catch (e) {
-            console.warn("Ignorado error en upsert parents:", e);
-          }
           const meta = u.user_metadata || {};
           setUser({
             id: u.id,
@@ -141,12 +136,17 @@ export const AuthProvider = ({ children }) => {
             name: meta.full_name || meta.name || u.email || "Usuario",
           });
           setAccessToken(session.access_token);
-          const { count } = await fetchDashboardMinorsCount(
+          const { ok, count } = await fetchDashboardMinorsCount(
             session.access_token,
             u.id,
           );
-          setIsNewUser(count === 0);
-          return { success: true, isNewUser: count === 0 };
+          if (ok) {
+            setIsNewUser(count === 0);
+            return { success: true, isNewUser: count === 0 };
+          }
+          // Si no podemos validar contra backend, no marcamos como "nuevo" para no forzar /pairing.
+          setIsNewUser(false);
+          return { success: true, isNewUser: false };
         }
         return { success: false, error: "Sesión incompleta." };
       }
@@ -188,14 +188,7 @@ export const AuthProvider = ({ children }) => {
         }
         if (data.session?.user) {
           const u = data.user;
-          
-          // Intentar forzar el registro en la tabla publica tras el registro auth
-          try {
-            await supabase.from("parents").upsert({ id: u.id, email: u.email });
-          } catch (e) {
-            console.warn("Ignorado error en upsert parents:", e);
-          }
-          
+
           const meta = u.user_metadata || {};
           setUser({
             id: u.id,
@@ -203,12 +196,17 @@ export const AuthProvider = ({ children }) => {
             name: meta.full_name || name || u.email || "Usuario",
           });
           setAccessToken(data.session.access_token);
-          const { count } = await fetchDashboardMinorsCount(
+          const { ok, count } = await fetchDashboardMinorsCount(
             data.session.access_token,
             u.id,
           );
-          setIsNewUser(count === 0);
-          return { success: true, isNewUser: count === 0 };
+          if (ok) {
+            setIsNewUser(count === 0);
+            return { success: true, isNewUser: count === 0 };
+          }
+          // En registro: si el backend no responde, mantenemos "nuevo" para que el flujo de pairing siga disponible.
+          setIsNewUser(true);
+          return { success: true, isNewUser: true };
         }
         return {
           success: false,
@@ -237,9 +235,13 @@ export const AuthProvider = ({ children }) => {
     [supabase],
   );
 
-  const completePairing = useCallback(() => {
+  const completePairing = useCallback(async () => {
+    // El backend es la fuente de verdad: si ya hay minors, isNewUser debe apagarse.
+    if (supabase && accessToken && user?.id) {
+      await syncPairingFromBackend(accessToken, user.id);
+    }
     setIsNewUser(false);
-  }, []);
+  }, [supabase, accessToken, user?.id, syncPairingFromBackend]);
 
   const logout = useCallback(async () => {
     if (supabase) {

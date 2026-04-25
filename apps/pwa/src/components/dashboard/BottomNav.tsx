@@ -34,7 +34,10 @@ export function BottomNav({
         return (
           <button
             key={item.id}
-            onClick={() => onSectionChange(item.id)}
+            onClick={() => {
+              onSectionChange(item.id);
+              document.getElementById(`section-${item.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
             className={cn(
               "flex-1 flex flex-col items-center justify-center gap-1 relative transition-colors duration-150",
               isActive ? "text-primary" : "text-muted-foreground",

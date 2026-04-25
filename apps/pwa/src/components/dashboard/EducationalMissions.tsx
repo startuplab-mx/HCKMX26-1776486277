@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { CheckCircle2, BookOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiUrl } from "@/lib/api";
+import { friendlyErrorMessage } from "@/lib/friendly-error";
 
 function InstitutionBadge({ shortName }: { shortName: string }) {
   const palette: Record<string, string> = {
@@ -56,7 +57,7 @@ export function EducationalMissions({
       if (!body.ok || !Array.isArray(body.missions)) throw new Error("Respuesta del servidor inesperada.");
       setMissions(body.missions as Mission[]);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Error al cargar misiones.");
+      setError(friendlyErrorMessage(e));
       setMissions([]);
     } finally {
       setLoading(false);
@@ -85,7 +86,7 @@ export function EducationalMissions({
       window.setTimeout(() => setCelebrateId(null), 1400);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "No se pudo completar la misión.");
+      setError(friendlyErrorMessage(e));
     } finally {
       setBusyId(null);
     }

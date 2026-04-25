@@ -95,6 +95,10 @@ vite.config.*.timestamp*
 # --- Despliegue ---
 .vercel/
 
+# --- Supabase (local CLI + migraciones privadas) ---
+/supabase/
+/.supabase/
+apps/api/supabase/
 
 # --- Carpeta local: cachés, borradores y archivos que no aportan al proyecto ---
 tool-cache/

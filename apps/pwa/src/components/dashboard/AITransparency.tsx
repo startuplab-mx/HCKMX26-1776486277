@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Lock, Check, Cpu, ShieldCheck } from "lucide-react";
-import { aiStats } from "@/mockData";
+import { apiUrl } from "@/lib/api";
+import { friendlyErrorMessage } from "@/lib/friendly-error";
 
 function useCountUp(target: number, duration = 1800) {
   const [count, setCount] = useState(0);
@@ -44,9 +45,38 @@ function Guarantee({ text }: { text: string }) {
   );
 }
 
-export function AITransparency() {
+type AiStats = {
+  messages_analyzed: number;
+  threats_detected: number;
+  privacy_breaches: number;
+  last_audit: string | null;
+  data_retention_days: number;
+  processing_local: boolean;
+};
+
+function formatLastAudit(value: string | null): string {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("es-MX");
+}
+
+export function AITransparency({
+  parentId,
+  accessToken,
+  enabled,
+}: {
+  parentId: string | null | undefined;
+  accessToken: string | null | undefined;
+  enabled: boolean;
+}) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const { count: msgCount, start: startMsg } = useCountUp(aiStats.messagesAnalyzed);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [stats, setStats] = useState<AiStats | null>(null);
+
+  const targetMessages = stats?.messages_analyzed ?? 0;
+  const { count: msgCount, start: startMsg } = useCountUp(targetMessages);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -62,6 +92,46 @@ export function AITransparency() {
     };
   }, [startMsg]);
 
+  useEffect(() => {
+    if (!enabled || !parentId || !accessToken) {
+      setStats(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    fetch(`${apiUrl("/api/ai/stats")}?parent_id=${encodeURIComponent(parentId)}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+      .then(async (res) => {
+        const body = (await res.json().catch(() => ({}))) as any;
+        if (!res.ok) throw new Error(body.message || body.error || `HTTP ${res.status}`);
+        if (!body.ok || !body.stats) throw new Error("Respuesta del servidor inesperada.");
+        return body.stats as AiStats;
+      })
+      .then((s) => {
+        if (cancelled) return;
+        setStats(s);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setError(friendlyErrorMessage(e));
+        setStats(null);
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [enabled, parentId, accessToken]);
+
   return (
     <div ref={containerRef} className="bg-card rounded-xl border border-border p-5 shadow-card h-full flex flex-col">
       <div className="flex items-center justify-between mb-5">
@@ -71,7 +141,9 @@ export function AITransparency() {
           </div>
           <div>
             <h3 className="font-display font-bold text-foreground text-sm">Transparencia de IA</h3>
-            <p className="text-xs text-muted-foreground">Auditado · {aiStats.lastAudit}</p>
+            <p className="text-xs text-muted-foreground">
+              {loading ? "Cargando…" : error ? "Error al cargar" : `Auditado · ${formatLastAudit(stats?.last_audit ?? null)}`}
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-safe-subtle border border-safe-border">
@@ -90,12 +162,22 @@ export function AITransparency() {
           </p>
         </div>
         <div className="text-center p-4 rounded-xl bg-safe-subtle border border-safe-border">
-          <p className="text-3xl font-bold font-display text-safe tabular-nums">{aiStats.privacyBreaches}</p>
+          <p className="text-3xl font-bold font-display text-safe tabular-nums">{stats?.privacy_breaches ?? 0}</p>
           <p className="text-[11px] text-safe/80 mt-1 font-medium leading-tight">
             brechas de privacidad detectadas
           </p>
         </div>
       </div>
+
+      {!enabled ? (
+        <div className="mb-4 rounded-xl border border-dashed border-border bg-background/40 p-3.5">
+          <p className="text-sm text-muted-foreground">Inicia sesión para ver métricas reales de auditoría.</p>
+        </div>
+      ) : error ? (
+        <div className="mb-4 rounded-xl border border-dashed border-border bg-background/40 p-3.5">
+          <p className="text-sm text-destructive">{error}</p>
+        </div>
+      ) : null}
 
       <div className="p-3.5 rounded-xl bg-muted/60 border border-border mb-4">
         <div className="flex items-start gap-2.5">

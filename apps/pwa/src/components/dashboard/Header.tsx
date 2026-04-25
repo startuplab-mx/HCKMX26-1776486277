@@ -1,4 +1,5 @@
 import { Bell, Menu, ShieldCheck } from "lucide-react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
@@ -17,6 +18,8 @@ export function Header({
   onChildChange: (index: number) => void;
   profiles: ChildProfile[];
 }) {
+  const [logoFailed, setLogoFailed] = useState(false);
+
   return (
     <header className="h-16 bg-card border-b border-border flex items-center px-4 lg:px-6 gap-3 shrink-0 z-30 shadow-xs">
       <div className="flex items-center gap-3">
@@ -31,13 +34,21 @@ export function Header({
 
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center shadow-primary">
-            <ShieldCheck className="w-4 h-4 text-primary-foreground" />
+            {!logoFailed ? (
+              <img
+                src="/brand/logo.png"
+                alt="Kipi Safe"
+                className="w-5 h-5 object-contain"
+                onError={() => setLogoFailed(true)}
+              />
+            ) : (
+              <ShieldCheck className="w-4 h-4 text-primary-foreground" />
+            )}
           </div>
           <div className="hidden sm:block">
             <span className="font-display font-semibold text-foreground text-base leading-none">
               Kipi Safe
             </span>
-            <p className="text-[10px] text-muted-foreground leading-none mt-0.5">by SafetyTech</p>
           </div>
         </div>
       </div>

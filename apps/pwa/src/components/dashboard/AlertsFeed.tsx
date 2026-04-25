@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ShieldCheck, Shield } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 import { AlertCard } from "./AlertCard";
 import { cn } from "@/lib/utils";
 import type { AlertItem } from "./types";
@@ -48,11 +48,6 @@ export function AlertsFeed({
             </span>
           )}
         </div>
-
-        <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary-subtle border border-primary/15">
-          <Shield className="w-3 h-3 text-primary" />
-          <span className="text-[11px] font-semibold text-primary">Firewall Ciego™</span>
-        </div>
       </div>
 
       <div className="flex items-center gap-1 mb-3 flex-wrap">
@@ -88,11 +83,10 @@ export function AlertsFeed({
             </p>
           </div>
         ) : (
-          filteredAlerts.map((alert, index) => (
+          filteredAlerts.map((alert) => (
             <div
               key={String(alert.id)}
-              className="animate-fade-in-up"
-              style={{ animationDelay: `${index * 80}ms`, opacity: 0 }}
+              className="transition-opacity"
             >
               <AlertCard
                 alert={alert}

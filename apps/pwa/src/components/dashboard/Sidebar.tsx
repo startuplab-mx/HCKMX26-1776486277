@@ -9,19 +9,19 @@ import {
   Zap,
   LogOut,
 } from "lucide-react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 
-const NAV_ITEMS: Array<{ id: string; label: string; icon: React.ComponentType<{ className?: string }>; badge?: number }> =
-  [
-    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { id: "alerts", label: "Alertas", icon: Bell, badge: 2 },
-    { id: "screentime", label: "Tiempo de Pantalla", icon: Clock },
-    { id: "privacy", label: "Privacidad IA", icon: Lock },
-    { id: "devices", label: "Dispositivos", icon: Smartphone },
-  ];
+const NAV_ITEMS: Array<{ id: string; label: string; icon: React.ComponentType<{ className?: string }> }> = [
+  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { id: "alerts", label: "Alertas", icon: Bell },
+  { id: "screentime", label: "Tiempo de Pantalla", icon: Clock },
+  { id: "privacy", label: "Privacidad IA", icon: Lock },
+  { id: "devices", label: "Dispositivos", icon: Smartphone },
+];
 
 const BOTTOM_ITEMS: Array<{ id: string; label: string; icon: React.ComponentType<{ className?: string }> }> = [
   { id: "settings", label: "Configuración", icon: Settings },
@@ -32,14 +32,17 @@ export function Sidebar({
   isMobile = false,
   activeSection,
   onSectionChange,
+  unreadAlerts,
 }: {
   className?: string;
   isMobile?: boolean;
   activeSection: string;
   onSectionChange: (sectionId: string) => void;
+  unreadAlerts: number;
 }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [logoFailed, setLogoFailed] = useState(false);
 
   const handleLogout = () => {
     logout();
@@ -53,13 +56,21 @@ export function Sidebar({
         <div className="h-16 flex items-center px-5 border-b border-border shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center">
-              <ShieldCheck className="w-4 h-4 text-primary-foreground" />
+              {!logoFailed ? (
+                <img
+                  src="/brand/logo.png"
+                  alt="Kipi Safe"
+                  className="w-5 h-5 object-contain"
+                  onError={() => setLogoFailed(true)}
+                />
+              ) : (
+                <ShieldCheck className="w-4 h-4 text-primary-foreground" />
+              )}
             </div>
             <div>
               <span className="font-display font-semibold text-foreground text-base leading-none">
                 Kipi Safe
               </span>
-              <p className="text-[10px] text-muted-foreground mt-0.5">by SafetyTech</p>
             </div>
           </div>
         </div>
@@ -73,11 +84,16 @@ export function Sidebar({
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           const isActive = activeSection === item.id;
+          const showBadge = item.id === "alerts" && unreadAlerts > 0;
+          const sectionId = `section-${item.id}`;
 
           return (
             <button
               key={item.id}
-              onClick={() => onSectionChange(item.id)}
+              onClick={() => {
+                onSectionChange(item.id);
+                document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+              }}
               className={cn(
                 "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150 text-left",
                 isActive
@@ -88,9 +104,9 @@ export function Sidebar({
             >
               <Icon className="w-4 h-4 shrink-0" />
               <span className="flex-1">{item.label}</span>
-              {item.badge ? (
+              {showBadge ? (
                 <span className="w-5 h-5 bg-warn text-warn-foreground rounded-full text-[10px] flex items-center justify-center font-bold">
-                  {item.badge}
+                  {unreadAlerts}
                 </span>
               ) : null}
             </button>

@@ -10,3 +10,6 @@ export * from "./value-objects/pairing-code.js";
 export * from "./value-objects/risk-level.js";
 export * from "./entities/parent.js";
 export * from "./ports/AuthPort.js";
+export * from "./dashboard/uuid.js";
+export * from "./dashboard/color.js";
+export * from "./dashboard/mappers.js";

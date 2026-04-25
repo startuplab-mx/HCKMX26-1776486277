@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   BarChart,
   Bar,
@@ -13,8 +13,9 @@ import {
   ReferenceLine,
 } from "recharts";
 import { Clock, TrendingUp } from "lucide-react";
-import { screenTimeCategoryData, weeklyScreenTimeData } from "@/mockData";
 import { cn } from "@/lib/utils";
+import { apiUrl } from "@/lib/api";
+import { friendlyErrorMessage } from "@/lib/friendly-error";
 
 const CATEGORY_COLORS = [
   "hsl(213, 55%, 48%)",
@@ -48,10 +49,82 @@ function WeeklyTooltip({ active, payload, label }: any) {
   return null;
 }
 
-export function ScreenTimeChart() {
+type ScreenTimeCategory = { name: string; hours: number; key: string };
+type WeeklyPoint = { day: string; hours: number };
+
+export function ScreenTimeChart({
+  minorId,
+  accessToken,
+  enabled,
+}: {
+  minorId: string | null;
+  accessToken: string | null | undefined;
+  enabled: boolean;
+}) {
   const [activeTab, setActiveTab] = useState<"category" | "weekly">("category");
 
-  const totalToday = screenTimeCategoryData.reduce((acc, item) => acc + item.hours, 0).toFixed(1);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [byCategory, setByCategory] = useState<ScreenTimeCategory[]>([]);
+  const [weekly, setWeekly] = useState<WeeklyPoint[]>([]);
+
+  useEffect(() => {
+    if (!enabled || !minorId || !accessToken) {
+      setByCategory([]);
+      setWeekly([]);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    fetch(`${apiUrl("/api/screen-time")}?minor_id=${encodeURIComponent(minorId)}`, {
+      cache: "no-store",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+      .then(async (res) => {
+        const body = (await res.json().catch(() => ({}))) as any;
+        if (!res.ok) throw new Error(body.message || body.error || `HTTP ${res.status}`);
+        if (!body.ok) throw new Error("Respuesta del servidor inesperada.");
+        return body;
+      })
+      .then((body: any) => {
+        if (cancelled) return;
+        const cats = Array.isArray(body?.today?.by_category) ? (body.today.by_category as ScreenTimeCategory[]) : [];
+        const wk = Array.isArray(body?.weekly) ? (body.weekly as WeeklyPoint[]) : [];
+        setByCategory(
+          cats.filter(
+            (c) => c && typeof c.name === "string" && typeof c.hours === "number" && typeof c.key === "string",
+          ),
+        );
+        setWeekly(wk.filter((p) => p && typeof p.day === "string" && typeof p.hours === "number"));
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setError(friendlyErrorMessage(e));
+        setByCategory([]);
+        setWeekly([]);
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [enabled, minorId, accessToken]);
+
+  const totalToday = useMemo(() => {
+    return byCategory.reduce((acc, item) => acc + item.hours, 0).toFixed(1);
+  }, [byCategory]);
+
+  const hasData = byCategory.length > 0 || weekly.length > 0;
+  const needsLogin = !accessToken;
+  const needsMinor = !!accessToken && !minorId;
 
   return (
     <div className="bg-card rounded-xl border border-border p-5 shadow-card">
@@ -63,7 +136,13 @@ export function ScreenTimeChart() {
           <div>
             <h3 className="font-display font-bold text-foreground text-sm">Tiempo de Pantalla</h3>
             <p className="text-xs text-muted-foreground">
-              Hoy · <span className="font-semibold text-foreground">{totalToday}h</span> en total
+              {loading ? (
+                "Cargando…"
+              ) : (
+                <>
+                  Hoy · <span className="font-semibold text-foreground">{totalToday}h</span> en total
+                </>
+              )}
             </p>
           </div>
         </div>
@@ -89,15 +168,33 @@ export function ScreenTimeChart() {
       </div>
 
       <div className="h-52">
-        {activeTab === "category" ? (
+        {!enabled || needsLogin ? (
+          <div className="h-full rounded-xl border border-dashed border-border bg-background/40 flex items-center justify-center px-6">
+            <p className="text-sm text-muted-foreground text-center">Inicia sesión para ver métricas reales.</p>
+          </div>
+        ) : needsMinor ? (
+          <div className="h-full rounded-xl border border-dashed border-border bg-background/40 flex items-center justify-center px-6">
+            <p className="text-sm text-muted-foreground text-center">
+              Vincula o selecciona un menor para ver métricas reales.
+            </p>
+          </div>
+        ) : error ? (
+          <div className="h-full rounded-xl border border-dashed border-border bg-background/40 flex items-center justify-center px-6">
+            <p className="text-sm text-destructive text-center">{error}</p>
+          </div>
+        ) : !hasData ? (
+          <div className="h-full rounded-xl border border-dashed border-border bg-background/40 flex items-center justify-center px-6">
+            <p className="text-sm text-muted-foreground text-center">Sin datos de uso aún.</p>
+          </div>
+        ) : activeTab === "category" ? (
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={screenTimeCategoryData} margin={{ top: 5, right: 10, left: -22, bottom: 5 }} barCategoryGap="32%">
+            <BarChart data={byCategory} margin={{ top: 5, right: 10, left: -22, bottom: 5 }} barCategoryGap="32%">
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(213, 18%, 90%)" vertical={false} />
               <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "hsl(213, 16%, 50%)", fontSize: 11, fontFamily: "Inter" }} />
               <YAxis axisLine={false} tickLine={false} tick={{ fill: "hsl(213, 16%, 50%)", fontSize: 11, fontFamily: "Inter" }} tickFormatter={(v) => `${v}h`} />
               <Tooltip content={<CategoryTooltip />} cursor={{ fill: "hsl(213, 28%, 96%)", radius: 4 }} />
               <Bar dataKey="hours" radius={[6, 6, 0, 0]} maxBarSize={48}>
-                {screenTimeCategoryData.map((_, index) => (
+                {byCategory.map((_, index) => (
                   <Cell key={`cell-${index}`} fill={CATEGORY_COLORS[index % CATEGORY_COLORS.length]} />
                 ))}
               </Bar>
@@ -105,7 +202,7 @@ export function ScreenTimeChart() {
           </ResponsiveContainer>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={weeklyScreenTimeData} margin={{ top: 5, right: 10, left: -22, bottom: 5 }}>
+            <AreaChart data={weekly} margin={{ top: 5, right: 10, left: -22, bottom: 5 }}>
               <defs>
                 <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="hsl(213, 55%, 48%)" stopOpacity={0.18} />
@@ -137,9 +234,9 @@ export function ScreenTimeChart() {
         )}
       </div>
 
-      {activeTab === "category" && (
+      {activeTab === "category" && enabled && !error && byCategory.length > 0 && (
         <div className="mt-3 pt-3 border-t border-border flex flex-wrap gap-x-3 gap-y-1.5">
-          {screenTimeCategoryData.map((item, index) => (
+          {byCategory.map((item, index) => (
             <div key={item.key} className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: CATEGORY_COLORS[index] }} />
               <span className="text-[11px] text-muted-foreground">
@@ -150,7 +247,7 @@ export function ScreenTimeChart() {
         </div>
       )}
 
-      {activeTab === "weekly" && (
+      {activeTab === "weekly" && enabled && !error && weekly.length > 0 && (
         <div className="mt-3 pt-3 border-t border-border flex items-center gap-1.5">
           <TrendingUp className="w-3.5 h-3.5 text-warn" />
           <span className="text-xs text-muted-foreground">

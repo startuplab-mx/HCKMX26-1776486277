@@ -51,7 +51,6 @@ export const AuthBranding: React.FC = () => {
             <span className="font-heading font-bold text-primary-foreground text-xl leading-none tracking-wider">
               Kipi Safe
             </span>
-            <p className="text-primary-foreground/45 text-xs mt-0.5">by SafetyTech</p>
           </div>
         </div>
 

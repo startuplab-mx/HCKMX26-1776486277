@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { Flame, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiUrl } from "@/lib/api";
+import { friendlyErrorMessage } from "@/lib/friendly-error";
 
 export function StreakCounter({
   parentId,
@@ -31,7 +32,7 @@ export function StreakCounter({
       if (typeof body.safe_days_streak !== "number") throw new Error("Respuesta inválida del servidor.");
       setStreak(body.safe_days_streak);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "No se pudo cargar la racha.");
+      setError(friendlyErrorMessage(e));
       setStreak(null);
     } finally {
       setLoading(false);

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MessageCircle, Send, ShieldCheck, AlertTriangle } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { friendlyErrorMessage } from "@/lib/friendly-error";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -22,13 +23,6 @@ function nowTs() {
   } catch {
     return "Ahora";
   }
-}
-
-function normalizeError(e: unknown) {
-  if (!e) return "Error inesperado.";
-  if (e instanceof Error && e.message) return e.message;
-  if (typeof e === "string") return e;
-  return "Error inesperado.";
 }
 
 function defaultWelcomeMessage(activeSection: string | undefined): ChatMessage {
@@ -128,7 +122,7 @@ export function ParentalChat({
       };
       setMessages((prev) => [...prev, botMsg]);
     } catch (e) {
-      setError(normalizeError(e));
+      setError(friendlyErrorMessage(e));
       const botMsg: ChatMessage = {
         id: `a_err_${Date.now()}`,
         role: "assistant",
@@ -160,21 +154,21 @@ export function ParentalChat({
   }
 
   return (
-    <Card className="shadow-card">
-      <CardHeader className="pb-4">
+    <Card className="shadow-card overflow-hidden border-border/80">
+      <CardHeader className="pb-4 bg-gradient-to-br from-primary-subtle/70 via-card to-card border-b border-border/70">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-primary-subtle flex items-center justify-center">
+            <div className="w-10 h-10 rounded-2xl bg-white/70 border border-primary/15 shadow-sm flex items-center justify-center">
               <MessageCircle className="w-4 h-4 text-primary" aria-hidden />
             </div>
             <div>
-              <CardTitle className="font-display text-sm">Asistente Parental</CardTitle>
+              <CardTitle className="font-display text-sm tracking-tight">Asistente Parental</CardTitle>
               <CardDescription className="text-xs">
                 Respuestas prácticas sin invadir privacidad (Firewall Ciego).
               </CardDescription>
             </div>
           </div>
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-safe-subtle border border-safe-border">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-safe-subtle border border-safe-border shadow-sm">
             <ShieldCheck className="w-3.5 h-3.5 text-safe" aria-hidden />
             <span className="text-[11px] font-semibold text-safe">Privacidad</span>
           </div>
@@ -182,17 +176,27 @@ export function ParentalChat({
       </CardHeader>
 
       <CardContent className="space-y-3">
-        <div className="rounded-xl border border-border bg-background/40">
-          <ScrollArea className="h-64">
-            <div className="p-4 space-y-3">
+        <div className="rounded-2xl border border-border/80 bg-muted/20 ring-1 ring-border/40">
+          <ScrollArea className="h-72">
+            <div className="p-4 sm:p-5 space-y-3">
               {messages.map((m) => {
                 const isUser = m.role === "user";
                 return (
-                  <div key={m.id} className={cn("flex", isUser ? "justify-end" : "justify-start")}>
+                  <div
+                    key={m.id}
+                    className={cn("flex gap-2.5", isUser ? "justify-end" : "justify-start")}
+                  >
+                    {!isUser && (
+                      <div className="mt-1 w-8 h-8 rounded-full bg-primary-subtle border border-primary/15 flex items-center justify-center shrink-0">
+                        <MessageCircle className="w-4 h-4 text-primary" aria-hidden />
+                      </div>
+                    )}
                     <div
                       className={cn(
-                        "max-w-[92%] sm:max-w-[85%] rounded-2xl px-3.5 py-2.5 border text-sm leading-relaxed",
-                        isUser ? "bg-primary text-primary-foreground border-primary/20" : "bg-card text-foreground border-border",
+                        "max-w-[92%] sm:max-w-[85%] rounded-2xl px-4 py-3 border text-sm leading-relaxed shadow-sm",
+                        isUser
+                          ? "bg-primary text-primary-foreground border-primary/20"
+                          : "bg-card/90 backdrop-blur text-foreground border-border/70",
                         m.isError && "border-destructive/40 bg-destructive/10",
                       )}
                     >
@@ -206,6 +210,7 @@ export function ParentalChat({
                         {m.ts}
                       </p>
                     </div>
+                    {isUser && <div className="w-8 shrink-0" aria-hidden />}
                   </div>
                 );
               })}
@@ -221,22 +226,31 @@ export function ParentalChat({
           </div>
         )}
 
-        <div className="flex flex-col gap-2">
-          <Textarea
-            value={draft}
-            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDraft(e.target.value)}
-            onKeyDown={onKeyDown}
-            placeholder="Escribe tu pregunta… (Enter para enviar · Shift+Enter para nueva línea)"
-            disabled={loading}
-            aria-label="Mensaje al asistente"
-            className="min-h-[68px]"
-          />
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-xs text-muted-foreground">No compartas datos sensibles (dirección, teléfono, etc.).</p>
-            <Button type="button" onClick={send} disabled={!canSend}>
-              {loading ? "Enviando…" : "Enviar"}
+        <div className="space-y-2">
+          <div className="relative">
+            <Textarea
+              value={draft}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDraft(e.target.value)}
+              onKeyDown={onKeyDown}
+              placeholder="Escribe tu pregunta… (Enter para enviar · Shift+Enter para nueva línea)"
+              disabled={loading}
+              aria-label="Mensaje al asistente"
+              className="min-h-[84px] rounded-2xl pr-12 bg-card/80 border-border/80 focus-visible:ring-2 focus-visible:ring-primary/30"
+            />
+            <Button
+              type="button"
+              onClick={send}
+              disabled={!canSend}
+              size="icon"
+              className="absolute bottom-2.5 right-2.5 rounded-xl shadow-sm"
+              aria-label={loading ? "Enviando" : "Enviar"}
+            >
               <Send className="w-4 h-4" aria-hidden />
             </Button>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs text-muted-foreground">No compartas datos sensibles (dirección, teléfono, etc.).</p>
+            <p className="text-xs text-muted-foreground">{loading ? "Enviando…" : canSend ? "Listo para enviar" : ""}</p>
           </div>
         </div>
       </CardContent>

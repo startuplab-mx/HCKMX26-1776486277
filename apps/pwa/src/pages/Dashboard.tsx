@@ -10,96 +10,22 @@ import { RecentApps } from "@/components/dashboard/RecentApps";
 import { AITransparency } from "@/components/dashboard/AITransparency";
 import { DeviceManagement } from "@/components/dashboard/DeviceManagement";
 import { ParentalAgreements } from "@/components/dashboard/ParentalAgreements";
-import { ManualAlertForm } from "@/components/dashboard/ManualAlertForm";
 import { StreakCounter } from "@/components/dashboard/StreakCounter";
 import { EducationalMissions } from "@/components/dashboard/EducationalMissions";
 import { ParentalChat } from "@/components/dashboard/ParentalChat";
-import { mockChildren, mockAlerts } from "@/mockData";
 import { useAuth } from "@/context/AuthContext";
 import { apiUrl } from "@/lib/api";
 import type { AlertItem, ChildProfile } from "@/components/dashboard/types";
-
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-function isUuid(s: unknown) {
-  return typeof s === "string" && UUID_RE.test(s);
-}
-
-function hueFromString(s: string) {
-  let h = 0;
-  for (let i = 0; i < s.length; i += 1) {
-    h = (h * 31 + s.charCodeAt(i)) >>> 0;
-  }
-  return h % 360;
-}
-
-type ApiMinor = {
-  minor_id: string;
-  name?: string | null;
-  age_mode?: "child" | "teen" | string | null;
-  alertas_recientes?: any[];
-};
-
-function mapMinorToProfile(minor: ApiMinor): ChildProfile {
-  const id = minor.minor_id;
-  const hue = hueFromString(id);
-  const age = minor.age_mode === "child" ? 12 : 16;
-  return {
-    id,
-    name: minor.name || "Menor",
-    age,
-    initial: (minor.name || "?").charAt(0).toUpperCase(),
-    grade: "—",
-    school: "—",
-    color: `hsl(${hue}, 55%, 48%)`,
-  };
-}
-
-function mapApiAlert(row: any): AlertItem {
-  const level: AlertItem["level"] =
-    row.risk_level === 3 ? "high" : row.risk_level === 2 ? "medium" : "info";
-  const fecha = row.fecha || row.created_at;
-  let timestamp = "Reciente";
-  try {
-    const d = new Date(fecha);
-    if (!Number.isNaN(d.getTime())) {
-      timestamp = d.toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" });
-    }
-  } catch {
-    /* ignore */
-  }
-  const ap = row.asistente_parental;
-  const summary = ap?.guia_contextual
-    ? String(ap.guia_contextual).slice(0, 320)
-    : `Alerta nivel ${row.risk_level} (${row.app_source || "App"})`;
-  const intervention = Array.isArray(ap?.recursos)
-    ? `Recursos: ${ap.recursos.join(", ")}`
-    : row.sensitive_data_flag
-      ? "Posible exposición de datos sensibles."
-      : "";
-
-  return {
-    id: row.id,
-    level,
-    category: row.sensitive_data_flag ? "Datos sensibles" : `Nivel ${row.risk_level}`,
-    platform: row.app_source || "Sistema",
-    timestamp,
-    summary,
-    intervention,
-    read: false,
-    patternCount: 0,
-    riskScore: row.risk_level === 3 ? 90 : row.risk_level === 2 ? 55 : 20,
-  };
-}
+import { isUuid, mapApiAlert, mapMinorToProfile } from "@kipi/domain";
+import type { ApiMinor } from "@kipi/domain";
+import { friendlyErrorMessage } from "@/lib/friendly-error";
 
 export default function Dashboard() {
   const { user, accessToken, supabaseMode } = useAuth() as any;
   const [activeChildIndex, setActiveChildIndex] = useState(0);
-  const [alerts, setAlerts] = useState<AlertItem[]>(mockAlerts as any);
+  const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [activeSection, setActiveSection] = useState("dashboard");
-  const [showManualAlertModal, setShowManualAlertModal] = useState(false);
 
   const [remoteMinors, setRemoteMinors] = useState<ApiMinor[]>([]);
   const [remoteLoading, setRemoteLoading] = useState(false);
@@ -113,6 +39,7 @@ export default function Dashboard() {
     setRemoteError(null);
     try {
       const res = await fetch(`${apiUrl("/api/dashboard")}?parent_id=${encodeURIComponent(user.id)}`, {
+        cache: "no-store",
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       const body = (await res.json().catch(() => ({}))) as any;
@@ -120,7 +47,7 @@ export default function Dashboard() {
       if (!body.ok || !Array.isArray(body.minors)) throw new Error("Respuesta del servidor inesperada.");
       setRemoteMinors(body.minors as ApiMinor[]);
     } catch (e) {
-      setRemoteError(e instanceof Error ? e.message : "Error al cargar datos.");
+      setRemoteError(friendlyErrorMessage(e));
       setRemoteMinors([]);
     } finally {
       setRemoteLoading(false);
@@ -132,8 +59,13 @@ export default function Dashboard() {
   }, [loadDashboard]);
 
   const profiles: ChildProfile[] = useMemo(() => {
-    if (useLiveApi) return remoteMinors.map(mapMinorToProfile);
-    return mockChildren as any;
+    if (!useLiveApi) return [];
+    // Importante: filtramos minors con IDs no compatibles con `isUuid()` (legacy seeds).
+    // Si no lo hacemos, el Dashboard puede seleccionar un minor inválido y las tarjetas
+    // que requieren `minor_id` (screen-time, apps, devices) se quedan en estado vacío.
+    return remoteMinors
+      .filter((m) => m?.minor_id != null && isUuid(String(m.minor_id)))
+      .map(mapMinorToProfile);
   }, [useLiveApi, remoteMinors]);
 
   useEffect(() => {
@@ -141,18 +73,23 @@ export default function Dashboard() {
   }, [activeChildIndex, profiles.length]);
 
   const activeChild = profiles[activeChildIndex] || profiles[0];
-  const activeMinorId = activeChild?.id != null ? String(activeChild.id) : null;
+  const activeMinorIdFromProfiles = activeChild?.id != null ? String(activeChild.id) : null;
+  const apiReadyMinors = useMemo(() => {
+    if (!useLiveApi) return [];
+    return (remoteMinors ?? []).filter((m) => m?.minor_id != null && isUuid(String(m.minor_id)));
+  }, [useLiveApi, remoteMinors]);
+
+  const activeMinorIdFromApi =
+    apiReadyMinors[activeChildIndex]?.minor_id ?? apiReadyMinors[0]?.minor_id ?? null;
+  const activeMinorId = activeMinorIdFromProfiles ?? activeMinorIdFromApi;
   const minorIdIsApiReady = activeMinorId != null && isUuid(activeMinorId);
 
   useEffect(() => {
-    if (!useLiveApi || !remoteMinors.length) {
-      setAlerts(mockAlerts as any);
-      return;
-    }
-    const minor = remoteMinors[activeChildIndex] || remoteMinors[0];
+    if (!useLiveApi || !apiReadyMinors.length) return;
+    const minor = apiReadyMinors[activeChildIndex] || apiReadyMinors[0];
     const raw = minor?.alertas_recientes || [];
     setAlerts(raw.map(mapApiAlert));
-  }, [useLiveApi, remoteMinors, activeChildIndex]);
+  }, [useLiveApi, apiReadyMinors, activeChildIndex]);
 
   const unreadAlerts = alerts.filter((a) => !a.read).length;
   const globalStatus: "safe" | "alert" = unreadAlerts > 0 ? "alert" : "safe";
@@ -177,6 +114,12 @@ export default function Dashboard() {
     setAlerts((prev) => prev.filter((a) => a.id !== id));
   };
 
+  useEffect(() => {
+    if (!activeSection) return;
+    const id = `section-${activeSection}`;
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [activeSection]);
+
   return (
     <div className="flex flex-col h-screen bg-background">
       <Header
@@ -188,7 +131,12 @@ export default function Dashboard() {
       />
 
       <div className="flex flex-1 overflow-hidden">
-        <Sidebar className="hidden lg:flex" activeSection={activeSection} onSectionChange={setActiveSection} />
+        <Sidebar
+          className="hidden lg:flex"
+          activeSection={activeSection}
+          onSectionChange={setActiveSection}
+          unreadAlerts={unreadAlerts}
+        />
 
         <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
           <SheetContent side="left" className="p-0 w-64 border-r border-border">
@@ -199,6 +147,7 @@ export default function Dashboard() {
                 setActiveSection(s);
                 setMobileSidebarOpen(false);
               }}
+              unreadAlerts={unreadAlerts}
             />
           </SheetContent>
         </Sheet>
@@ -208,6 +157,14 @@ export default function Dashboard() {
             <p className="text-sm text-muted-foreground mb-2">Cargando datos reales…</p>
           )}
           {remoteError && useLiveApi && <p className="text-sm text-destructive mb-2">{remoteError}</p>}
+          {!useLiveApi && (
+            <div className="mb-4 rounded-xl border border-border bg-card p-4">
+              <p className="text-sm font-semibold text-foreground">Conecta tu cuenta para ver datos reales</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Inicia sesión con Supabase para cargar menores, alertas y métricas desde el backend.
+              </p>
+            </div>
+          )}
 
           <div className="mb-4">
             <h1 className="text-xl font-display font-bold text-foreground">
@@ -221,54 +178,60 @@ export default function Dashboard() {
             )}
           </div>
 
-          <GlobalStatus status={globalStatus} unreadAlerts={unreadAlerts} childName={activeChild?.name || "tu hijo/a"} />
-
-          <div className="mt-5 max-w-3xl">
-            <StreakCounter
-              parentId={user?.id}
-              accessToken={accessToken}
-              enabled={!!useLiveApi}
-              childName={activeChild?.name || "tu hijo"}
+          <section id="section-dashboard">
+            <GlobalStatus
+              status={globalStatus}
+              unreadAlerts={unreadAlerts}
+              childName={activeChild?.name || "tu hijo/a"}
+              devicesActive={profiles.length}
             />
-          </div>
+          </section>
 
-          <div className="mt-5">
+          <section
+            className="mt-5 grid grid-cols-1 lg:grid-cols-[0.85fr_1.15fr] gap-4 lg:gap-5 items-start"
+            id="section-streak-chat"
+          >
+            <div id="section-streak">
+              <StreakCounter
+                parentId={user?.id}
+                accessToken={accessToken}
+                enabled={!!useLiveApi}
+                childName={activeChild?.name || "tu hijo"}
+              />
+            </div>
+            <div id="section-chat">
+              <ParentalChat
+                parentId={user?.id}
+                accessToken={accessToken}
+                enabled={!!useLiveApi}
+                activeSection={activeSection}
+              />
+            </div>
+          </section>
+
+          <section className="mt-5" id="section-missions">
             <EducationalMissions parentId={user?.id} accessToken={accessToken} enabled={!!useLiveApi} />
-          </div>
-
-          <div className="mt-5 max-w-3xl">
-            <ParentalChat
-              parentId={user?.id}
-              accessToken={accessToken}
-              enabled={!!useLiveApi}
-              activeSection={activeSection}
-            />
-          </div>
+          </section>
 
           {useLiveApi && !remoteLoading && profiles.length === 0 && !remoteError && (
-            <p className="text-sm text-muted-foreground mb-3">
-              No hay menores asociados a tu cuenta en la base de datos. Crea o vincula un menor en Supabase para usar
-              alertas manuales y análisis con IA.
-            </p>
+            <div className="mb-4 rounded-xl border border-border bg-card p-4">
+              <p className="text-sm font-semibold text-foreground">No hay menores asociados a tu cuenta</p>
+              <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
+                El backend está respondiendo, pero no encontró menores para tu usuario actual.
+                Si sembraste datos de demo, asegúrate de que el <span className="font-semibold text-foreground">parent_id</span>{" "}
+                coincida con tu <span className="font-semibold text-foreground">auth.users.id</span>.
+              </p>
+              <div className="mt-3 rounded-lg border border-border bg-muted/30 px-3 py-2">
+                <p className="text-xs text-muted-foreground">Tu `auth.users.id` (cópialo al seed si hace falta)</p>
+                <p className="text-xs font-mono text-foreground break-all">{String(user?.id || "")}</p>
+              </div>
+              <p className="text-xs text-muted-foreground mt-3">
+                Archivo: <span className="font-mono">apps/api/supabase/migrations/006_demo_seed.sql</span>
+              </p>
+            </div>
           )}
 
-          <div className="mt-5 flex justify-end">
-            <button
-              type="button"
-              onClick={() => setShowManualAlertModal(true)}
-              disabled={supabaseMode && !!accessToken && !minorIdIsApiReady}
-              title={
-                supabaseMode && accessToken && !minorIdIsApiReady
-                  ? "Selecciona un menor con UUID válido (datos cargados desde el servidor)"
-                  : undefined
-              }
-              className="px-4 py-2 text-sm bg-primary text-primary-foreground font-semibold rounded-lg hover:bg-primary-light transition disabled:opacity-50 disabled:pointer-events-none"
-            >
-              + Alerta Manual
-            </button>
-          </div>
-
-          <div className="mt-5">
+          <section className="mt-5" id="section-alerts">
             <AlertsFeed
               alerts={alerts}
               onMarkRead={handleMarkRead}
@@ -276,34 +239,45 @@ export default function Dashboard() {
               minorId={minorIdIsApiReady ? activeMinorId : (activeChild?.id as any)}
               analyzeDisabled={supabaseMode && !!accessToken && !minorIdIsApiReady}
             />
-          </div>
+          </section>
 
-          <div className="mt-5 grid grid-cols-1 xl:grid-cols-2 gap-4 lg:gap-5">
-            <ScreenTimeChart />
-            <RecentApps />
-          </div>
+          <section className="mt-5 grid grid-cols-1 xl:grid-cols-2 gap-4 lg:gap-5" id="section-screentime">
+            <ScreenTimeChart
+              minorId={minorIdIsApiReady ? activeMinorId : null}
+              accessToken={accessToken}
+              enabled={!!useLiveApi}
+            />
+            <RecentApps
+              minorId={minorIdIsApiReady ? activeMinorId : null}
+              accessToken={accessToken}
+              enabled={!!useLiveApi}
+            />
+          </section>
 
           <div className="mt-4 lg:mt-5 grid grid-cols-1 xl:grid-cols-3 gap-4 lg:gap-5">
             <div className="xl:col-span-2">
-              <AITransparency />
+              <section id="section-privacy">
+                <AITransparency parentId={user?.id} accessToken={accessToken} enabled={!!useLiveApi} />
+              </section>
             </div>
             <div className="flex flex-col gap-4">
-              <DeviceManagement />
-              <ParentalAgreements
-                minorId={minorIdIsApiReady ? activeMinorId : (activeChild?.id as any)}
-                switchesDisabled={supabaseMode && !!accessToken && !minorIdIsApiReady}
-              />
+              <section id="section-devices">
+                <DeviceManagement
+                  minorId={minorIdIsApiReady ? activeMinorId : null}
+                  accessToken={accessToken}
+                  enabled={!!useLiveApi && minorIdIsApiReady}
+                />
+              </section>
+              <section id="section-agreement">
+                <ParentalAgreements
+                  minorId={minorIdIsApiReady ? activeMinorId : (activeChild?.id as any)}
+                  switchesDisabled={supabaseMode && !!accessToken && !minorIdIsApiReady}
+                />
+              </section>
             </div>
           </div>
         </main>
       </div>
-
-      <ManualAlertForm
-        open={showManualAlertModal}
-        onOpenChange={setShowManualAlertModal}
-        minorId={minorIdIsApiReady ? activeMinorId : (activeChild?.id as any)}
-        onSuccess={loadDashboard}
-      />
 
       <BottomNav unreadAlerts={unreadAlerts} activeSection={activeSection} onSectionChange={setActiveSection} />
     </div>
