@@ -6,8 +6,7 @@ import {
   useEffect,
 } from "react";
 import { supabase as getBrowserSupabase } from "@/lib/supabaseClient";
-
-const apiUrl = (path) => path;
+import { apiUrl } from "@/lib/api";
 
 const AuthContext = createContext(null);
 

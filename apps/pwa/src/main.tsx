@@ -4,6 +4,7 @@ import { createBrowserRouter, RouterProvider, Outlet, Navigate } from "react-rou
 import { registerSW } from "virtual:pwa-register";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import LoginPage from "./pages/LoginPage";
+import Dashboard from "./pages/Dashboard";
 import "./index.css";
 import React from "react";
 
@@ -64,12 +65,7 @@ const router = createBrowserRouter([
     children: [
       {
         path: "dashboard",
-        element: (
-          <div className="p-8">
-            <h1 className="text-3xl font-heading text-primary">Dashboard</h1>
-            <p className="text-muted-foreground mt-2">¡Bienvenido! Has iniciado sesión correctamente.</p>
-          </div>
-        ),
+        element: <Dashboard />,
       },
       {
         path: "pairing",
