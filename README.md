@@ -45,7 +45,7 @@ Kipi Safe cambia el paradigma: en lugar de vigilar, **preserva la confianza**. S
 
 ### 3.1 Link del repositorio de la app movil
 
-[Pega aquí el link del repositorio de la app móvil]
+https://github.com/startuplab-mx/HCKMX26-1776486277-mobile
 
 ---
 
@@ -124,7 +124,23 @@ pnpm dev
 
 ## 5. Demo del prototipo
 
-**🎥 [Insertar Enlace Público al Video Demo Aquí]**
+**🎥 [https://drive.google.com/drive/folders/1bvPk95g09pJZDu5-tpiuG8OqXuBNzAuo?usp=sharing]**
+
+También puedes probar la demo ya desplegada:
+
+- **Login**: https://kipi-server-production.up.railway.app/login
+- **Dashboard**: https://kipi-server-production.up.railway.app/dashboard
+
+Para facilitar las pruebas , habilitamos una cuenta demo con la que se puede **saltar la parte de vincular dispositivo**:
+
+- **Correo**: `ana@familia.com`
+- **Contraseña**: `demo1234`
+
+**Flujo de prueba recomendado**:
+
+1. Entra a `https://kipi-server-production.up.railway.app/login`
+2. Inicia sesión con la cuenta demo
+3. Si la app solicita vincular dispositivo, navega directo al dashboard en `https://kipi-server-production.up.railway.app/dashboard`
 
 ---
 
